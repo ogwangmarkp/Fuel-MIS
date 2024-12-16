@@ -1,0 +1,37 @@
+# Python
+**/__pycache__/**
+*.pyc
+
+# virtual environment
+venv/**
+env/**
+
+# migrations
+**/migrations/*
+**/migrations/
+
+# VS Code
+.vscode/**
+
+# Database
+db.sqlite3
+
+# logs
+**/logs/**
+*.log
+
+#scripts
+restart_app.sh
+
+
+# Other Files
+.DS_Store
+.DS_Store
+dump.rdb
+static/.DS_Store
+static/files/.DS_Store
+.env
+app.log
+
+.DS_Store
+.env
