@@ -40,16 +40,41 @@ class UserView(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         branch_id = self.request.data.get('user_branch')
+        group_id = self.request.data.get('group')
+
         if not branch_id:
             branch_id = get_current_user(self.request, 'branch_id', 1)
 
         branch = CompanyBranch.objects.get(id=branch_id)
-        serializer.save(user_branch=branch, user_added_by=self.request.user.id)
+        saved_user = serializer.save(user_branch=branch, user_added_by=self.request.user.id)
+        if saved_user:
+            user_assigned_group = UserAssignedGroup.objects.filter(user=saved_user).first()
+            user_group = UserGroup.objects.filter(id=group_id).first()
+            if user_assigned_group:
+              user_assigned_group.is_active= True
+              user_assigned_group.group = user_group
+              user_assigned_group.save()
+            else:
+                user_assigned_group_field = {
+                    "group": user_group, "assigned_by": self.request.user, "user": saved_user, "is_active": True}
+                UserAssignedGroup.objects.create(**user_assigned_group_field)
 
     def perform_update(self, serializer):
         branchid = self.request.data.get('user_branch')
-        serializer.save(user_branch_id=branchid,
+        group_id = self.request.data.get('group')
+        updated_user = serializer.save(user_branch_id=branchid,
                         user_added_by=self.request.user.id)
+        if updated_user:
+            user_assigned_group = UserAssignedGroup.objects.filter(user=updated_user).first()
+            user_group = UserGroup.objects.filter(id=group_id).first()
+            if user_assigned_group:
+              user_assigned_group.is_active= True
+              user_assigned_group.group = user_group
+              user_assigned_group.save()
+            else:
+                user_assigned_group_field = {
+                    "group": user_group, "assigned_by": self.request.user, "user": updated_user, "is_active": True}
+                UserAssignedGroup.objects.create(**user_assigned_group_field)
 
 
 class UserView2(viewsets.ModelViewSet):
@@ -461,3 +486,26 @@ class RegisterUserApiView(APIView):
             saveUser.set_password(password)
             saveUser.save()
         return Response({"message": "User successfully register", "status": "success"})
+    
+class ResetPasswordView(APIView):
+
+    def get_object(self, queryset=None):
+        return self.request.user
+    '''
+    Reset password view
+    '''
+    def post(self, request, *args, **kwargs):
+        user_id = request.data.get('user_id', None)
+        new_password = request.data.get('new_password')
+
+        if user_id:
+            user = User.objects.filter(id=user_id).first()
+        else:
+            return Response({"message": "User with this ID does not exist."}, status=status.HTTP_404_NOT_FOUND)
+
+        user.set_password(new_password)
+        #user.pass_reset_date = timezone.now()
+        user.save()
+
+        return Response({"message": "Password has been reset successfully."}, status=status.HTTP_200_OK)
+

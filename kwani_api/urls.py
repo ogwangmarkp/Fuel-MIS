@@ -119,6 +119,7 @@ urlpatterns = [
     path('api/user-visits/', user_views.UserVisitsAPIView.as_view()),
     path('api/user-likes/', user_views.UserLikesAPIView.as_view()),
     path('api/register-user/', user_views.RegisterUserApiView.as_view()),
+    path('api/reset-password/', user_views.ResetPasswordView.as_view()),
 
     path('api/system-rights/', systemrights_views.SystemRightView.as_view()),
     path('api/company-type-components/',systemrights_views.CompanyTypeComponentsView.as_view()),

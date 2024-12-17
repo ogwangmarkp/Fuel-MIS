@@ -403,8 +403,20 @@ class PumpReadingsView(viewsets.ModelViewSet):
 class ShiftsView(viewsets.ModelViewSet):
     serializer_class = ShiftSerializer
     
+
     def get_queryset(self):
+        new_shifts =['Day','Night']
         branch_id = get_current_user(self.request, 'branch_id', None)
+        shifts = Shift.objects.filter(branch__id=branch_id, name='date')
+        if shifts:
+            return shifts
+        for new_shift in new_shifts:
+            Shift.objects.create(**{
+                "branch_id":branch_id,
+                "name":new_shift,
+                "added_by": self.request.user
+            })
+        
         return Shift.objects.filter(branch__id=branch_id)
 
     def perform_create(self, serializer):

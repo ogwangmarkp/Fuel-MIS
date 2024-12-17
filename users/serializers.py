@@ -7,11 +7,11 @@ class UserSerializer(serializers.ModelSerializer):
     user_branch   = serializers.CharField(required=False,read_only=True)
     password      = serializers.CharField(required=False,read_only=True)
     branch_id     = serializers.CharField(required=False,read_only=True,source="user_branch.id")
-    group         = serializers.SerializerMethodField()
+    group_id         = serializers.SerializerMethodField()
     group_name    = serializers.SerializerMethodField()
     fullname      = serializers.SerializerMethodField()
 
-    def get_group(self, obj):
+    def get_group_id(self, obj):
         user_assinged_group = UserAssignedGroup.objects.filter(user=obj).first()
         if user_assinged_group:
             return user_assinged_group.group.id

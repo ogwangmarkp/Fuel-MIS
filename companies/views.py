@@ -61,6 +61,10 @@ class CompaniesView(viewsets.ModelViewSet):
         branch.save()
         populate_system_coa(company, self.request.user.id)
 
+    def perform_update(self, serializer):
+        saved_company = serializer.save()
+        populate_system_coa(saved_company, self.request.user.id)
+
     
 class CompanyBranchView(viewsets.ModelViewSet):
     serializer_class = CompanyBranchSerializer
