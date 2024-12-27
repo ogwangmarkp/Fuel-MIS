@@ -509,7 +509,7 @@ class CapturePumpReadingView(APIView):
                     teller__id = attendant.teller.id,
                     record_date__date__gte=record_date,
                     record_date__date__lte=record_date,
-                    shift__name=shift
+                    shift__name__iexact=shift
                 ).first()
                 if payment:
                     payment_list.append({"id":payment.id,"teller_id":attendant.teller.id,"teller":f'{attendant.teller.first_name} {attendant.teller.last_name}',"amount":payment.amount})
@@ -533,7 +533,8 @@ class CapturePumpReadingView(APIView):
                 product=dip_product,
                 record_date__date__gte=record_date,
                 record_date__date__lte=record_date,
-                shift__name=shift).order_by('id').first()
+                shift__name__iexact=shift
+                ).order_by('id').first()
                 if dip_reading_item:
                     dip_list.append({
                     "id":dip_reading_item.id,
@@ -566,7 +567,7 @@ class CapturePumpReadingView(APIView):
                             pump_product=pump_product,
                             pump_reading__record_date__date__gte=record_date,
                             pump_reading__record_date__date__lte=record_date,
-                            pump_reading__shift__name=shift).first()
+                            pump_reading__shift__name__iexact=shift).first()
                         
                         if pump_reading_item:
                             closing = pump_reading_item.closing if pump_reading_item.closing else 0
@@ -616,6 +617,8 @@ class CapturePumpReadingView(APIView):
                 name__iexact=shift_name,
                 branch__id=branch_id
             ).first()
+            print("shift---",shift.name)
+            print("shift_name",shift_name)
             pump_reading = PumpReading.objects.filter(
                 record_date__date__gte=record_date,
                 record_date__date__lte=record_date,
