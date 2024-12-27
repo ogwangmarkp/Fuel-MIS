@@ -7,23 +7,6 @@ from django.utils import timezone
 from django.conf import settings
 from companies.models import *
 
-
-class CustomerGroup(models.Model):
-    name = models.CharField(max_length=255)
-    description = models.TextField(default='', null=True, blank=True)
-    deleted = models.BooleanField(default=False)
-    parent = models.ForeignKey('CustomerGroup', null=True, blank=True,
-                               on_delete=models.CASCADE, related_name='customer_group_parent')
-    date_added = models.DateTimeField(default=timezone.now)
-    added_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='customer_group_addedby')
-
-    def __str__(self):
-        return self.name
-
-    class Meta:
-        db_table = 'public\".\"customer_group'
-
 class CustomerType(models.Model):
     customer_type = models.CharField(max_length=100)
     type_key      = models.CharField(max_length=50)
@@ -101,8 +84,8 @@ class Customer(models.Model):
     customer_type   = models.CharField(max_length = 255, default="Individual")
     is_deleted      = models.BooleanField(default=False)
     is_member       = models.BooleanField(default=False)
-    group           = models.ForeignKey(CustomerGroup, null=True, blank=True, on_delete=models.CASCADE, related_name='customer_customer_group')
-
+    physical_address = models.TextField(null=True,blank=True)
+    vehicle_no   = models.CharField(max_length = 255, null=True,blank=True)
     company         = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='customer_company')
     added_by        = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='customer_added_by', null=True, blank=True)
     date_added      = models.DateTimeField(default = timezone.now)

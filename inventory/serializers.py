@@ -173,6 +173,79 @@ class PurchaseRequisitionSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
+class SaleRequisitionItemSerializer(serializers.ModelSerializer):
+    product_name = serializers.CharField(read_only=True,source="product_variation.product.product_name")
+    price = serializers.CharField(read_only=True,source="product_variation.regular_price")
+    variation_name = serializers.CharField(read_only=True,source="product_variation.variation_name")
+    customer_name = serializers.CharField(read_only=True,source="sale_requisition.customer.name")
+    telephone_1 = serializers.CharField(read_only=True,source="sale_requisition.customer.telephone_1")
+    vehicle_no = serializers.CharField(read_only=True,source="sale_requisition.customer.vehchle_no")
+    invoice_no = serializers.CharField(read_only=True,source="sale_requisition.invoice_no")
+    price = serializers.SerializerMethodField()
+    discount = serializers.SerializerMethodField()
+
+    def get_price(self, obj):
+        if obj.sale_requisition.status != 'pending':
+            return obj.price_at
+        return float(obj.product_variation.regular_price)
+    
+    def get_discount(self, obj):
+        if obj.sale_requisition.status != 'pending':
+            return obj.discount_at
+        return float(obj.product_variation.product.discount)
+    
+    class Meta:
+        model = SaleRequisitionItem
+        fields = '__all__'
+
+
+class  SaleRequisitionSerializer(serializers.ModelSerializer):
+    branch = serializers.CharField(read_only=True)
+    added_by = serializers.CharField(read_only=True)
+    requisition_items = serializers.SerializerMethodField()
+    requisition_totals = serializers.SerializerMethodField()
+    customer_name = serializers.CharField(read_only=True,source="customer.name")
+    telephone_1 = serializers.CharField(read_only=True,source="customer.telephone_1")
+    vehicle_no = serializers.CharField(read_only=True,source="customer.vehchle_no")
+    def get_requisition_items(self, obj):
+        req_items = SaleRequisitionItem.objects.filter(sale_requisition=obj)
+        return SaleRequisitionItemSerializer(req_items,many=True, read_only=True).data
+    
+    def get_requisition_totals(self, obj):
+        qty = 0
+        amount = 0
+        discount = 0
+        paid_amount = 0
+        paid_discount = 0
+        price = 0
+        is_paid = False
+        discount_rate = 0
+        req_items = SaleRequisitionItem.objects.filter(sale_requisition=obj)
+        if req_items:
+            for req_item in req_items:
+                if obj.status == 'pending':
+                    price = float(req_item.product_variation.regular_price)
+                    discount_rate = float(req_item.product_variation.product.discount)
+                else:
+                    price = req_item.price_at
+                    discount_rate = req_item.discount_at
+
+                qty += float(req_item.quantity)
+                amount += float(req_item.quantity) * price
+                discount += float(req_item.quantity) * price * discount_rate * 0.01
+                order_item = OrderItem.objects.filter(order=obj.order, product_variation=req_item.product_variation).first()
+                
+                if order_item:
+                    is_paid = True
+                    paid_amount += float(order_item.quantity) * float(order_item.price)
+                    paid_discount += float(order_item.discount) 
+        return {"is_paid":is_paid,"qty":qty,"amount":amount,"discount":discount,"paid_amount":paid_amount,"paid_discount":paid_discount}
+    
+    class Meta:
+        model = SaleRequisition
+        fields = '__all__'
+
+ 
 class PumpSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(read_only=True)
     date_added = serializers.DateTimeField(read_only=True)

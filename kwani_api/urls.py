@@ -37,7 +37,6 @@ router.register(r'service-class', companies_views.ServiceClassView, basename='se
 router.register(r'company-service-class', companies_views.CompanyServiceClassView, basename='company-service-class')
 
 
-router.register(r'customer-groups', cutomer_views.CustomerGroupsView, basename='customer-groups')
 router.register(r'customer-types', cutomer_views.CompanyTypesView, basename='customer-types')
 router.register(r'customer-extra-fields', cutomer_views.CompanyTypeFieldsView, basename='customer-extra-fields')
 router.register(r'customer-field-options', cutomer_views.CustomerFieldOptionsView, basename='customer-field-options')
@@ -90,9 +89,12 @@ router.register(r'service-tags', service_views.ServiceTagsViewSet, basename='ser
 router.register(r'services', service_views.ServicesViewSet, basename='services')
 router.register(r'service-variations', service_views.ServiceVariationsViewSet, basename='service-variations')
 
+
+router.register(r'staff-contracts', hr_views.StaffContractsViewSet, basename='staff-contracts')
+router.register(r'salaries', hr_views.SalariesViewSet, basename='salaries')
+
 router.register(r'staff-deductions', hr_views.StaffDeductionsViewSet, basename='staff-deductions')
 router.register(r'salary-payments', hr_views.SalaryPaymentsViewSet, basename='salary-payments')
-
 
 # Inventory   
 router.register(r'pumps', inventory_views.PumpsView, basename='pumps')
@@ -105,6 +107,7 @@ router.register(r'shifts', inventory_views.ShiftsView, basename='shifts')
 router.register(r'stock-list', inventory_views.StocksViewSet, basename='stock-list')
 router.register(r'purchase-requisition-list', inventory_views.PurchaseRequisitionsViewSet, basename='purchase-requisition-list')
 router.register(r'order-list', inventory_views.OrdersViewSet, basename='order-list')
+router.register(r'sale-requisition-list', inventory_views.SaleRequisitionsViewSet, basename='sale-requisition-list')
 
 #router.register(r'seasons', inventory_views.OrganisationSeasonViewSet, basename='organisation-season')
 
@@ -147,6 +150,10 @@ urlpatterns = [
     
     # Pump Updates
     path('api/capture-pump-readings/', inventory_views.CapturePumpReadingView.as_view()),
-    
+    path('api/pump-summarry/', inventory_views.PumpSummaryView.as_view()),
+    path('api/cash-payments/', inventory_views.CashTransationView.as_view()),
+    path('api/generate-payroll/', hr_views.GeneratePayrollView.as_view()),
+    path('api/capture-salaries/', hr_views.CaptureSalriesView.as_view()),
+    path('api/staff-salary-balance/', hr_views.StaffSalaryBalanceView.as_view()),
 ]
 

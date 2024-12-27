@@ -8,9 +8,9 @@ def get_customer_next_no(company_id, customer_no = None):
     if customer_no:
         last_customer_no = customer_no
     else:
-        customer = Customer.objects.filter(company=company).order_by('-customer_old_no').first()
+        customer = Customer.objects.filter(company=company).order_by('-customer_old_no')
         if customer:
-            last_customer_no = customer.customer_no
+            last_customer_no = len(customer)
 
   
     #num_part = int(last_customer_no[1:])

@@ -44,6 +44,7 @@ class Product(models.Model):
     product_name = models.CharField(max_length=255)
     description = models.TextField(default='', null=True, blank=True)
     can_resell = models.BooleanField(default=False)
+    is_fuel = models.BooleanField(default=True)
     discount = models.FloatField(default=0.0)
     deleted = models.BooleanField(default=False)
     date_added = models.DateTimeField(default=timezone.now)
@@ -56,6 +57,7 @@ class Product(models.Model):
     
     parent_cat = models.ForeignKey('ProductCategory', null=True, blank=True, on_delete=models.CASCADE, related_name='inv_parent_cat')
     chart_account = models.ForeignKey(AccountsChart, on_delete=models.CASCADE, related_name='product_chart_account', null=True, blank=True)
+    account_recievable = models.ForeignKey(AccountsChart, on_delete=models.CASCADE, related_name='product_account_recievable', null=True, blank=True)
 
     def __str__(self):
         return self.product_name
@@ -229,6 +231,59 @@ class RequisitionItem(models.Model):
     class Meta:
         db_table = 'public\".\"requisition_ttem'
 
+class SaleRequisition(models.Model):
+    STATUSES = (
+        ('pending', 'Pending'),
+        ('rejected', 'Rejected'),
+        ('approved', 'Approved'),
+        ('closed', 'Closed')
+    )
+    REQ_TYPES = (
+        ('discount-sales', 'discount-sales'),
+        ('credit-sales', 'credit-sales'),
+    )
+    heading = models.TextField(null=True, blank=True)
+    notes = models.TextField(null=True, blank=True)
+    invoice_no = models.CharField(max_length=255, null=True, blank=True)
+    approved_notes = models.TextField(null=True, blank=True)
+    is_closed = models.BooleanField(default=False)
+    status = models.CharField(
+        max_length=50, default='pending', choices=STATUSES)
+    sales_type = models.CharField(
+        max_length=50, default='discount-sales', choices=REQ_TYPES)
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,null=True, blank=True, related_name='sr_approved_by')
+    approved_date = models.DateTimeField(null=True, blank=True)
+    order = models.ForeignKey(
+        Order, on_delete=models.CASCADE, null=True, blank=True, related_name='sr_order')
+    customer = models.ForeignKey(
+        Customer, on_delete=models.CASCADE, related_name='sr_customer')
+    branch = models.ForeignKey(
+        CompanyBranch, on_delete=models.CASCADE, related_name='sr_btanch')
+    date_added = models.DateTimeField(default=timezone.now)
+    added_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+                                 related_name='sr_addedby', null=False, blank=False)
+    
+    class Meta:
+        db_table = 'public\".\"sale_requisition'
+
+
+class SaleRequisitionItem(models.Model):
+    price_at = models.FloatField(null=False, blank=False,default=0)
+    discount_at = models.FloatField(null=False, blank=False,default=0)
+    quantity = models.FloatField(null=False, blank=False)
+    product_variation = models.ForeignKey(
+        ProductVariation, on_delete=models.CASCADE, related_name='sri_product_variation')
+    sale_requisition = models.ForeignKey(
+        SaleRequisition, on_delete=models.CASCADE, related_name='sri_sale_requisition')
+    date_added = models.DateTimeField(default=timezone.now)
+    added_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='sri_addedby')
+
+    class Meta:
+        db_table = 'public\".\"sale_requisition_item'
+
+
 class OrderPayment(models.Model):
     quantity = models.FloatField(null=False, blank=False)
     total_discount = models.FloatField(null=False, blank=False, default=0)
@@ -297,8 +352,9 @@ class Shift(models.Model):
         
 class PumpReading(models.Model):
     APPROVAL_STATUSES = (
+        ('draft', 'Draft'),
         ('pending', 'Pending'),
-        ('open', 'Open'),
+        ('approved', 'Approved'),
         ('closed', 'Closed'),
         ('reversed', 'Reversed')
     )
@@ -307,9 +363,10 @@ class PumpReading(models.Model):
     shift =  models.ForeignKey(Shift, on_delete=models.CASCADE, related_name='prd_shift')
     record_date = models.DateTimeField(default=timezone.now)
     status = models.CharField(
-        max_length=25, choices=APPROVAL_STATUSES, default='open')
+        max_length=25, choices=APPROVAL_STATUSES, default='draft')
     date_added = models.DateTimeField(null=True, blank=True)
     comment = models.TextField(null=True, blank=True)
+    is_closed = models.BooleanField(default=False)
 
     class Meta:
         db_table = 'public\".\"pump_reading'
@@ -323,10 +380,33 @@ class PumpReadingItem(models.Model):
     pump_reading =  models.ForeignKey(PumpReading, on_delete=models.CASCADE, related_name='prdi_pump_reading',blank=True)
     pump_product =  models.ForeignKey(PumpProduct, on_delete=models.CASCADE, related_name='prdi_pump_product',blank=True)
     attendant  = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='prdi_attendant',blank=True)
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='prdi_attendant',null=True,blank=True)
     added_by  = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='prdi_addedby')
     class Meta:
         db_table = 'public\".\"pump_reading_item'
 
+class DipReading(models.Model):
+    dip1 = models.FloatField(null=True,blank=True)
+    dip2 = models.FloatField(null=True,blank=True)
+    rtt  = models.FloatField(null=True,blank=True)
+    date_added = models.DateTimeField(null=True, blank=True)
+    shift =  models.ForeignKey(Shift, on_delete=models.CASCADE, related_name='dipr_shift')
+    record_date = models.DateTimeField(default=timezone.now)
+    product =  models.ForeignKey(Product, on_delete=models.CASCADE, related_name='dipr_product',null=True,blank=True)
+    added_by  = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='dipr_addedby')
+    class Meta:
+        db_table = 'public\".\"dip_reading'
 
+
+class TempCashPayment(models.Model):
+    amount = models.FloatField(null=True,blank=True)
+    record_date = models.DateTimeField(default=timezone.now)
+    shift =  models.ForeignKey(Shift, on_delete=models.CASCADE, related_name='tcp_shift')
+    teller =  models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='tcp_teller',null=True,blank=True)
+    date_added = models.DateTimeField(default=timezone.now)
+    added_by  = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='tcp_addedby')
+    class Meta:
+        db_table = 'public\".\"temp_cash_payment'

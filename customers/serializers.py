@@ -1,13 +1,7 @@
 
 from rest_framework import serializers
-from locations.serializers import CustomerAddressSerializer
 from .models import *
 
-
-class CustomerGroupSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = CustomerGroup
-        fields = '__all__'
 
 class CustomerTypeSerializer(serializers.ModelSerializer):
     extra_fields = serializers.SerializerMethodField(read_only=True)
@@ -51,7 +45,6 @@ class CustomerTypeFieldSerializer(serializers.ModelSerializer):
 
 class CustomerSerializer(serializers.ModelSerializer):
     company = serializers.PrimaryKeyRelatedField(read_only=True, required=False)
-    customer_address = CustomerAddressSerializer(many=True, read_only=True)
     customer_no = serializers.CharField(read_only=True)
     added_by = serializers.CharField(read_only=True)
 

@@ -471,7 +471,6 @@ class PostLedgerTransationView(APIView):
         if type == 'cash' or type == 'bank':
             account_balance = get_chart_of_account_balance_at(
                 credit_chart_id, branch_id)
-            print("account_balance --------", account_balance)
 
             if account_balance['balance_raw'] < float(amount):
                 data = {
@@ -541,38 +540,43 @@ class ExpenseLedgerTransactionsView(APIView):
         credit_chart_id = self.request.data.get('credit_chart')
         payment_method = self.request.data.get('pay_method')
         voucher_no = self.request.data.get('voucher_no')
-        inter_branch_ledger = None
-
-        if payment_method == 'cash':
-            permission = UserPermissions.objects.filter(user_id=self.request.user.id, is_feature_active=True, is_company_comp_active=True,
-                                                        is_group_active=True, is_role_component_active=True, is_assigned_group_active=True, key='POST_ALL_BRANCHES_EXPENSES').first()
-            if permission:
-                cash_account = CashAccount.objects.filter(
-                    chart__id=credit_chart_id).first()
-                if cash_account:
-                    branch_id = cash_account.teller.user_branch.id
-
+        staff_id = self.request.data.get('staff',None)
+        source = self.request.data.get('source',None)
+        coment = self.request.data.get('coment',None)
         credit_chart = AccountsChart.objects.get(pk=credit_chart_id)
         reference_no = generate_reference_no(
             credit_chart.account_line, company_id, 'exp')
+       
+        transaction = LedgerTransaction.objects.create(**{
+            "amount":amount,
+            "heading":heading,
+            "coment":coment,
+            "record_date":record_date,
+            "pay_method":payment_method,
+            "voucher_no":voucher_no,
+            "reference_no":reference_no,
+            "credit_chart_id":credit_chart_id,
+            "debit_chart_id":debit_chart_id,
+            "branch_id":branch_id,
+            "added_by": self.request.user
+        })
+        
+        if staff_id and source == 'staff_deduction':
+            StaffDeduction.objects.create(**{
+                "user_id":staff_id,
+                "status":"approved",
+                "transaction": transaction,
+                "branch_id":branch_id
+            })
 
-        if inter_branch_ledger:
-            interbranch_transaction = LedgerTransaction(amount=amount, heading=heading, record_date=record_date, pay_method='settlement', voucher_no=voucher_no,
-                                                        reference_no=reference_no, debit_chart_id=debit_chart_id, credit_chart_id=inter_branch_ledger.id, branch_id=branch_id, added_by=self.request.user)
-            interbranch_transaction.save()
-
-            transaction = LedgerTransaction(amount=amount, heading=heading, record_date=record_date, pay_method=payment_method, voucher_no=voucher_no,
-                                            reference_no=reference_no, debit_chart_id=inter_branch_ledger.id, credit_chart_id=credit_chart_id, branch_id=branch_id, added_by=self.request.user)
-            transaction.save()
-
-            interbranch_relation = InterBranchTransaction(
-                source_transaction=transaction, destination_transaction=interbranch_transaction, added_by=self.request.user)
-            interbranch_relation.save()
-        else:
-            transaction = LedgerTransaction(amount=amount, heading=heading, record_date=record_date, pay_method=payment_method, voucher_no=voucher_no,
-                                            reference_no=reference_no, debit_chart_id=debit_chart_id, credit_chart_id=credit_chart_id, branch_id=branch_id, added_by=self.request.user)
-            transaction.save()
-
+        if staff_id and source == 'staff_salary':
+            SalaryPayment.objects.create(**{
+                "user_id":staff_id,
+                "status":"approved",
+                "transaction": transaction,
+                "branch_id":branch_id
+        })
+            
         data = {
             'message': 'Transaction created.',
             'status': 'success'
@@ -634,8 +638,7 @@ class PendingExpenseLedgerTransactionsViewset(viewsets.ModelViewSet):
             SalaryPayment.objects.create(**{
                 "user_id":staff_id,
                 "pending_expense": saved_expenses,
-                "branch_id":branch_id,
-                "pay_month": pay_month
+                "branch_id":branch_id
         })
 
     def perform_update(self, serializer):
@@ -643,6 +646,10 @@ class PendingExpenseLedgerTransactionsViewset(viewsets.ModelViewSet):
 
         approved_expense = serializer.save(
             last_updated_by=self.request.user, last_updated=datetime.now())
+        
+        staff_deduction = StaffDeduction.objects.filter(pending_expense__id=approved_expense.id).first()
+        salary_payment = SalaryPayment.objects.filter(pending_expense__id=approved_expense.id).first()
+
         if approved_expense.status == 'approved':
             credit_chart = None
             debit_chart = AccountsChart.objects.get(
@@ -652,23 +659,34 @@ class PendingExpenseLedgerTransactionsViewset(viewsets.ModelViewSet):
 
             reference_no = generate_reference_no(
                 credit_chart.account_line, company_id, 'exp')
-            transaction = LedgerTransaction(amount=approved_expense.amount, heading=approved_expense.heading, coment=approved_expense.comment, record_date=approved_expense.record_date, pay_method=approved_expense.pay_method,
-                                            voucher_no=approved_expense.voucher_no, reference_no=reference_no, credit_chart=credit_chart, debit_chart=debit_chart, branch_id=approved_expense.branch.id, added_by=self.request.user)
-            saved_transaction = transaction.save()
-            staff_deduction = StaffDeduction.objects.filter(pending_expense__id=approved_expense.id).first()
+            
+            transaction = LedgerTransaction.objects.create(**{
+                "amount":approved_expense.amount,
+                "heading":approved_expense.heading,
+                "coment":approved_expense.comment,
+                "record_date":approved_expense.record_date,
+                "pay_method":approved_expense.pay_method,
+                "voucher_no":approved_expense.voucher_no,
+                "reference_no":reference_no,
+                "credit_chart":credit_chart,
+                "debit_chart":debit_chart,
+                "branch_id":approved_expense.branch.id,
+                "added_by": self.request.user
+            })
+
             if staff_deduction:
-                staff_deduction.transaction = saved_transaction
+                staff_deduction.transaction = transaction
                 staff_deduction.status = 'approved'
                 staff_deduction.save()
             
-            salary_payment = SalaryPayment.objects.filter(pending_expense__id=approved_expense.id).first()
+            print("salary_payment",salary_payment)
             if salary_payment:
-                salary_payment.transaction = saved_transaction
+                salary_payment.transaction = transaction
                 salary_payment.status = 'approved'
                 salary_payment.save()
+                print("transaction ------",transaction)
 
         if approved_expense.status == 'declined':
-            
             if staff_deduction:
                 staff_deduction.status = 'declined'
                 staff_deduction.save()
