@@ -641,7 +641,7 @@ class CapturePumpReadingView(APIView):
                 for pump in pump_list:
                     for readings in pump['products']:
                         pump_reading_item = PumpReadingItem.objects.filter(id=readings['id']).first()
-                        if status == 'draft'  or status == 'pending':
+                        if status == 'draft'  or status == 'pending' and readings['attendant']:
                             if pump_reading_item:
                                 pump_reading_item.opening = readings['opening'] if readings['opening'] else None
                                 pump_reading_item.closing = readings['closing'] if readings['closing'] else None
