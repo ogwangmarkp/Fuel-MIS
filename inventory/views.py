@@ -503,7 +503,7 @@ class CapturePumpReadingView(APIView):
         pumps = Pump.objects.filter(**{"branch__id":branch_id})
         dip_products = Product.objects.filter(**{"company__id":company_id})
         attendants = CashAccount.objects.filter(teller__user_branch__id=branch_id)
-        if attendants:
+        ''' if attendants:
             for attendant in attendants:
                 payment = TempCashPayment.objects.filter(
                     teller__id = attendant.teller.id,
@@ -515,7 +515,7 @@ class CapturePumpReadingView(APIView):
                     payment_list.append({"id":payment.id,"teller_id":attendant.teller.id,"teller":f'{attendant.teller.first_name} {attendant.teller.last_name}',"amount":payment.amount})
                 else:
                     payment_list.append({"id":0,"teller_id":attendant.teller.id,"teller":f'{attendant.teller.first_name} {attendant.teller.last_name}',"amount":0})
-
+        '''
         pump_reading = PumpReading.objects.filter(
             record_date__date__gte=record_date,
             record_date__date__lte=record_date,
@@ -676,7 +676,7 @@ class CapturePumpReadingView(APIView):
                                     "record_date":record_date,
                                     "added_by": self.request.user
                                 })
-                if payments:
+                '''if payments:
                     for payment in payments:
                         payment_item = TempCashPayment.objects.filter(id=payment['id']).first()
                         if status == 'draft'  or status == 'pending' or status == 'approved':
@@ -693,7 +693,7 @@ class CapturePumpReadingView(APIView):
                                     "added_by": self.request.user
                                 })
 
-                            ''' if status == 'approved':
+                             if status == 'approved':
                                 # Register teller cash
                                 teller_account = CashAccount.objects.filter(teller__id=payment['teller_id']).first()
                                 reference_no = generate_reference_no(
