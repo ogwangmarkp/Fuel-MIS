@@ -519,7 +519,7 @@ class CapturePumpReadingView(APIView):
         pump_reading = PumpReading.objects.filter(
             record_date__date__gte=record_date,
             record_date__date__lte=record_date,
-            shift__name=shift,
+            shift__name__iexact=shift,
             shift__branch__id=branch_id
         ).first() 
         
@@ -613,7 +613,7 @@ class CapturePumpReadingView(APIView):
             branch_id = get_current_user(self.request, 'branch_id', None)
             # Retrive pump product readings
             shift = Shift.objects.filter(
-                name=shift_name,
+                name__iexact=shift_name,
                 branch__id=branch_id
             ).first()
             pump_reading = PumpReading.objects.filter(
