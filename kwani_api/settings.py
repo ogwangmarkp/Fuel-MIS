@@ -30,7 +30,7 @@ SECRET_KEY = config('SECRET_KEY', default='')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=True, cast=bool)
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1','35.175.217.53','erp1.dawnholdingsgroup.com']
+ALLOWED_HOSTS = ['localhost', '127.0.0.1','13.53.40.163','erp1.dawnholdingsgroup.com']
 
 # Application definition
 INSTALLED_APPS = [
