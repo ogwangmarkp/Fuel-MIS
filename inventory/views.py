@@ -109,8 +109,7 @@ class StocksViewSet(viewsets.ModelViewSet):
         variation = ProductVariation.objects.get(pk=product_variation_id)
         variation_name = variation.product.product_name
         if len(variation.variation_name) > 0:
-            variation_name = f'{
-                variation.product.product_name} ({variation.variation_name})'
+            variation_name = f'{variation.product.product_name} ({variation.variation_name})'
         heading = 'Stock purchase: '+variation_name+" of amount:" + \
             str(float(purchase_price) * float(quantity))
 
@@ -184,8 +183,7 @@ class OrdersViewSet(viewsets.ModelViewSet):
                             pk=order_item['product_variation'])
                         variation_name = variation.product.product_name
                         if len(variation.variation_name) > 0:
-                            variation_name = f'{
-                                variation.product.product_name} ({variation.variation_name})'
+                            variation_name = f'{variation.product.product_name} ({variation.variation_name})'
                         debit_chart = variation.product.chart_account
 
                         # Generate reference number
@@ -252,8 +250,7 @@ class OrdersViewSet(viewsets.ModelViewSet):
                             discount = total * float(req_item.discount_at) * 0.01
 
                         if len(variation.variation_name) > 0:
-                            variation_name = f'{
-                                variation.product.product_name} ({variation.variation_name})'
+                            variation_name = f'{variation.product.product_name} ({variation.variation_name})'
                         credit_chart = variation.product.chart_account
                         
                         # Generate reference number
