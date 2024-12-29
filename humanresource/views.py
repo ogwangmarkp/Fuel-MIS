@@ -26,7 +26,7 @@ class StaffDeductionsViewSet(viewsets.ModelViewSet):
 
         #if paid_deductions:
             #filter_q['transaction__isnull'] = False
-        return StaffDeduction.objects.filter(**filter_q).order_by('-id')
+        return StaffDeduction.objects.filter(**filter_q).order_by('-pending_expense__record_date','-transaction__record_date')
 
 class StaffContractsViewSet(viewsets.ModelViewSet):
     serializer_class = StaffContractSerializer
@@ -35,7 +35,7 @@ class StaffContractsViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         branch_id = get_current_user(self.request, 'branch_id', None)
         filter_q = {'user__user_branch__id':branch_id}
-        return StaffContract.objects.filter(**filter_q).order_by('-id')
+        return StaffContract.objects.filter(**filter_q).order_by('user__first_name')
     
     def perform_create(self, serializer):
         serializer.save(added_by=self.request.user)
@@ -58,7 +58,7 @@ class SalariesViewSet(viewsets.ModelViewSet):
             'pay_month__date__gte':start_date,
             'pay_month__date__lte':end_date
             }
-        return Salary.objects.filter(**filter_q).order_by('-id')
+        return Salary.objects.filter(**filter_q).order_by('-pay_month')
 
 
 
@@ -69,7 +69,7 @@ class SalaryPaymentsViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         branch_id = get_current_user(self.request, 'branch_id', None)
-        return SalaryPayment.objects.filter(**{'branch__id':branch_id}).order_by('-id')
+        return SalaryPayment.objects.filter(**{'branch__id':branch_id}).order_by('-pending_expense__record_date','-transaction__record_date')
     
 
 class GeneratePayrollView(APIView):

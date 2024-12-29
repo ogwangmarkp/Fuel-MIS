@@ -357,15 +357,15 @@ class SaleRequisitionsViewSet(viewsets.ModelViewSet):
 
         saved_requistion = serializer.save(approved_by=self.request.user,status=status,is_closed=is_closed)
 
-        if status == 'rejected' and status == 'approved':
-            req_items = SaleRequisitionItem.objects.filter(sale_requisition__id=saved_requistion)
+        if status == 'rejected' or status == 'approved':
+            req_items = SaleRequisitionItem.objects.filter(sale_requisition=saved_requistion)
             if req_items:
                 for req_item in req_items:
                     req_item.price_at = float(req_item.product_variation.regular_price)
                     req_item.discount_at = float(req_item.product_variation.product.discount)
+                    print("req_item.product_variation.product.discount",req_item.product_variation.product.discount)
                     req_item.save()
                    
-
 
 class StockTakingView(APIView):
 
@@ -961,11 +961,11 @@ class PumpSummaryView(APIView):
                 record_date__date__lte=record_date).order_by('-id').first()
 
                 if dip_reading_1:
-                    data_dict['dip1'] = dip_reading_1.dip1
-                    data_dict['dip2'] = dip_reading_1.dip2
+                    data_dict['dip1'] = dip_reading_1.dip1 if dip_reading_1.dip1 else 0
+                    data_dict['dip2'] = dip_reading_1.dip2 if dip_reading_1.dip2 else 0
 
                 if dip_reading_2:
-                    data_dict['dip2'] = dip_reading_2.dip2
+                    data_dict['dip2'] = dip_reading_2.dip2  if dip_reading_2.dip2 else 0
 
                 pump_products = PumpProduct.objects.filter(product__product=product)
                 
