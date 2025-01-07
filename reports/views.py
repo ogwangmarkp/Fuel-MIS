@@ -27,7 +27,7 @@ class TrialBalanceView(APIView):
             branch_id = get_current_user(self.request, 'branch_id', None)
 
         if int(branch_id) == 0:
-            branch_id = ',' . join(map(str, CompanyBranch.objects.filter(company_id=company_id).values_list('id', flat=True)))
+            branch_id = ',' . join(map(str, CompanyBranch.objects.filter(company__id=company_id).values_list('id', flat=True)))
 
         #Cash account details
         end = self.request.GET.get('e')
@@ -79,7 +79,7 @@ class IncomeStatementView(APIView):
             branch_id = get_current_user(self.request, 'branch_id', None)
 
         if int(branch_id) == 0:
-            branch_id = ',' . join(map(str, CompanyBranch.objects.filter(branch_company_id=company_id).values_list('id', flat=True)))
+            branch_id = ',' . join(map(str, CompanyBranch.objects.filter(company__id=company_id).values_list('id', flat=True)))
 
         #Cash account details
         end = self.request.GET.get('e')
@@ -115,7 +115,7 @@ class BalanceSheetView(APIView):
             branch_id = get_current_user(self.request, 'branch_id', None)
 
         if int(branch_id) == 0:
-            branch_id = ',' . join(map(str, CompanyBranch.objects.filter(company_id=company_id).values_list('id', flat=True)))
+            branch_id = ',' . join(map(str, CompanyBranch.objects.filter(company__id=company_id).values_list('id', flat=True)))
 
         #Cash account details
         end = self.request.GET.get('e')

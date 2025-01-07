@@ -52,16 +52,42 @@ class ProductsViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         company_id = get_current_user(self.request, 'company_id', None)
-        return Product.objects.filter(**{'company__id': company_id, "deleted": False}).order_by('-id')
+        return Product.objects.filter(**{'company__id': company_id, "deleted": False}).order_by('product_name')
 
     def perform_create(self, serializer):
         company_id = get_current_user(self.request, 'company_id', None)
-        serializer.save(
-            company_id=company_id, added_by=self.request.user)
+        saved_product = serializer.save(company_id=company_id,added_by=self.request.user )
+        
+        if saved_product:
+            ProductVariation.objects.create(**{
+                "variation_name" : saved_product.product_name,
+                "description":saved_product.description,
+                "regular_price" : saved_product.regular_price,
+                "unit_of_measure":saved_product.unit_of_measure,
+                "product" : saved_product,
+                "added_by":self.request.user
+            })
+
 
     def perform_update(self, serializer):
-         serializer.save()
-        
+        updated_product = serializer.save()
+        if updated_product and updated_product.enable_variation == False:
+            # Get the first variation as the default variation
+            varation = ProductVariation.objects.filter(**{'product':updated_product, "deleted": False}).first()
+            # If variation exists, update it's amount and unit of measure
+            if varation:
+                varation.regular_price = updated_product.regular_price
+                varation.unit_of_measure = updated_product.unit_of_measure
+                varation.save()
+            else:
+                ProductVariation.objects.create(**{
+                    "variation_name" : updated_product.product_name,
+                    "description":updated_product.description,
+                    "regular_price" : updated_product.regular_price,
+                    "unit_of_measure":updated_product.unit_of_measure,
+                    "product" : updated_product,
+                    "added_by":self.request.user
+                })
 
 
 class ProductVariationsViewSet(viewsets.ModelViewSet):
@@ -467,15 +493,15 @@ class ShiftsView(viewsets.ModelViewSet):
     def get_queryset(self):
         new_shifts =['Day','Night']
         branch_id = get_current_user(self.request, 'branch_id', None)
-        shifts = Shift.objects.filter(branch__id=branch_id, name='date')
+        shifts = Shift.objects.filter(branch__id=branch_id)
         if shifts:
             return shifts
-        ''' for new_shift in new_shifts:
+        for new_shift in new_shifts:
             Shift.objects.create(**{
                 "branch_id":branch_id,
                 "name":new_shift,
                 "added_by": self.request.user
-            }) '''
+            }) 
         
         return Shift.objects.filter(branch__id=branch_id)
 

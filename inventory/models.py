@@ -46,6 +46,10 @@ class Product(models.Model):
     can_resell = models.BooleanField(default=False)
     is_fuel = models.BooleanField(default=True)
     discount = models.FloatField(default=0.0)
+    enable_variation = models.BooleanField(default=False)
+    regular_price = models.FloatField(null=True, blank=True,default=0.0)
+    unit_of_measure = models.CharField(
+        max_length=255, default='', null=True, blank=True)
     deleted = models.BooleanField(default=False)
     date_added = models.DateTimeField(default=timezone.now)
     category = models.ForeignKey(ProductCategory, on_delete=models.CASCADE,
