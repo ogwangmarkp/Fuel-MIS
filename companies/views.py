@@ -9,6 +9,7 @@ from systemrights.models import *
 from rest_framework.response import Response
 from kwani_api.utils import get_current_user
 from rest_framework import status
+from .permissions import *
 from ledgers.helper import populate_system_coa
 # Create your views here.
 
@@ -36,7 +37,7 @@ class CompanyServiceClassView(viewsets.ModelViewSet):
 
 class CompaniesView(viewsets.ModelViewSet):
     serializer_class = CompanySerializer
-    queryset = Company.objects.all().order_by('-id')
+    queryset = Company.objects.all().order_by('name')
 
     def perform_create(self, serializer):
         company_type_id = self.request.data.get('company_type')
@@ -145,6 +146,32 @@ class SwitchCompany(APIView):
                         user_session.data = {"company_id":company_id, "branch_id":branch_id}
                         user_session.save()
                         return Response({"message":"Switch successfully","status":"success","data":company_settings_list})
+        return Response({"message":"Something went wrong","status":"failed"})
+
+class SwitchBranch(APIView):
+    permission_classes = [IsPostOnly]
+    
+    def post(self, request, format=None):
+        branch_id = request.data.get('branch_id')
+        if branch_id:
+            branch = CompanyBranch.objects.get(pk=branch_id)
+
+            data = {"user": request.user}
+            if request.META.get('HTTP_AUTHORIZATION', None):
+                token = request.META.get('HTTP_AUTHORIZATION').split(' ')[1]
+                data['session_token'] = token
+
+            company_settings_list = {}
+            company_settings = CompanySetting.objects.filter(company_setting=branch.company).all()
+            for company_setting in company_settings:
+                company_settings_list[company_setting.setting_key] = company_setting.setting_value
+            
+            user_session = UserSession.objects.filter(**data).first()
+            if user_session:
+                if branch:
+                    user_session.data = {"company_id":branch.company.id, "branch_id":branch_id}
+                    user_session.save()
+                    return Response({"message":"Switch successfully","status":"success","data":company_settings_list})
         return Response({"message":"Something went wrong","status":"failed"})
 
 class RefreshCOAsView(APIView):

@@ -64,12 +64,19 @@ class Customer(models.Model):
     ('O', 'Other'),
     ('NA', 'N/A')
     )
+
+    STATUSES = (
+    ('active', 'Active'),
+    ('pending', 'Pending')
+    )
+
     name      = models.CharField(max_length = 255, null=False, blank=False)
     telephone_1     = models.CharField(max_length = 55, null=True, blank=True)
     telephone_2     = models.CharField(max_length = 55, null=True, blank=True)
     has_smartphone  = models.BooleanField(default=True)
     ocupation       = models.CharField(max_length = 55, null=True, blank=True)
-    gender          = models.CharField(max_length = 55, null=True, blank=True, choices=GENDER, default='NA')
+    gender          = models.CharField(max_length = 55,choices=GENDER, default='O')
+    status          = models.CharField(max_length = 55, choices=STATUSES, default='pending')
     nationality     = models.CharField(max_length = 255, default="Ugandan")
     dob = models.DateField(null=True, blank=True)
     nin = models.CharField(max_length=20, null=True, blank=True)
@@ -87,6 +94,8 @@ class Customer(models.Model):
     physical_address = models.TextField(null=True,blank=True)
     vehicle_no   = models.CharField(max_length = 255, null=True,blank=True)
     company         = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='customer_company')
+    branch = models.ForeignKey(
+        CompanyBranch, on_delete=models.CASCADE, related_name='customer_branch',null=True, blank=True)
     added_by        = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='customer_added_by', null=True, blank=True)
     date_added      = models.DateTimeField(default = timezone.now)
     

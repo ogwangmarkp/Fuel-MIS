@@ -42,14 +42,9 @@ class ProductTag(models.Model):
 
 class Product(models.Model):
     product_name = models.CharField(max_length=255)
-    description = models.TextField(default='', null=True, blank=True)
-    can_resell = models.BooleanField(default=False)
+    code = models.CharField(max_length=255)
     is_fuel = models.BooleanField(default=True)
-    discount = models.FloatField(default=0.0)
     enable_variation = models.BooleanField(default=False)
-    regular_price = models.FloatField(null=True, blank=True,default=0.0)
-    unit_of_measure = models.CharField(
-        max_length=255, default='', null=True, blank=True)
     deleted = models.BooleanField(default=False)
     date_added = models.DateTimeField(default=timezone.now)
     category = models.ForeignKey(ProductCategory, on_delete=models.CASCADE,
@@ -89,13 +84,14 @@ class ProductVariation(models.Model):
     featured_image_url =  models.TextField(null=True, blank=True)
     variation_name = models.CharField(max_length=255)
     description = models.TextField(default='', null=True, blank=True)
-    regular_price = models.FloatField(null=False, blank=False,default=0.0)
+    is_default = models.BooleanField(default=False)
     unit_of_measure = models.CharField(
         max_length=255, default='', null=True, blank=True)
     deleted = models.BooleanField(default=False)
     date_added = models.DateTimeField(default=timezone.now)
     enable_back_order = models.BooleanField(default=False)
     lead_time = models.DateTimeField(null=True, blank=True)
+    discount = models.FloatField(default=0.0)
     product = models.ForeignKey(
         Product, on_delete=models.CASCADE, related_name='pv_product')
     added_by = models.ForeignKey(
@@ -108,31 +104,50 @@ class ProductVariation(models.Model):
         db_table = 'public\".\"inv_product_variation'
 
 
+class ProductPricing(models.Model):
+    STATUSES = (
+        ('pending', 'pending'),
+        ('approved', 'approved'),
+        ('inactive', 'inactive'),
+    )
+    regular_price = models.FloatField(null=False, blank=False,default=0.0)
+    description = models.TextField(default='', null=True, blank=True)
+    status = models.CharField(
+        max_length=50, default='pending', choices=STATUSES)
+    deleted = models.BooleanField(default=False)
+    date_added = models.DateTimeField(default=timezone.now)
+    variation = models.ForeignKey(
+        ProductVariation, on_delete=models.CASCADE, related_name='pvp_variation')
+    added_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='pvp_addedby')
+
+    class Meta:
+        db_table = 'public\".\"product_pricing'
+
+
 class Order(models.Model):
     STATUSES = (
-        ('Pending', 'Pending'),
-        ('Failed', 'Failed'),
-        ('Processed', 'Processed'),
-        ('Processing', 'Processing')
+        ('pending', 'Pending'),
+        ('failed', 'Failed'),
+        ('processed', 'Processed'),
+        ('processing', 'Processing')
     )
     ORDER_TYPES = (
-        ('Purchases', 'Purchases'),
-        ('Sales', 'Sales')
+        ('purchases', 'Purchases'),
+        ('sales', 'Sales')
     )
     heading =  models.TextField(null=False, blank=False, default='Order')
     order_number = models.CharField(
         max_length=255, default='', null=True, blank=True)
-    invoice_no = models.CharField(
-        max_length=255, default='', null=True, blank=True)
     status = models.CharField(
-        max_length=50, default='Pending', choices=STATUSES)
+        max_length=50, default='pending', choices=STATUSES)
     discount_coupon = models.CharField(
         max_length=255, default='', null=True, blank=True) 
     order_type = models.CharField(
-        max_length=50, default='Sales', choices=ORDER_TYPES)
+        max_length=50, default='sales', choices=ORDER_TYPES)
     customer = models.ForeignKey(
         Customer, on_delete=models.CASCADE, related_name='order_customer', null=True)
-    payment_method = models.TextField(default='', null=False, blank=False)
+    payment_method = models.TextField(default='', null=True, blank=True)
     record_date = models.DateTimeField(default=timezone.now)
     branch = models.ForeignKey(
         CompanyBranch, on_delete=models.CASCADE, related_name='order_btanch')
@@ -159,15 +174,44 @@ class OrderItem(models.Model):
     class Meta:
         db_table = 'public\".\"order_item'
 
+
+class Invoice(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('paid', 'Paid'),
+        ('cancelled', 'Cancelled')
+    ]
+
+    invoice_number = models.CharField(max_length=20, unique=True, editable=False)
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="invoice_order")
+    date_added = models.DateTimeField(default=timezone.now)
+    due_date = models.DateField()
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
+    added_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='invoice_addedby')
+    deleted = models.BooleanField(default=False)
+
+    class Meta:
+        db_table = 'public\".\"invoice'
+   
+
+class InvoiceItem(models.Model):
+    invoice = models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name="iitem_invoice")
+    order_item = models.ForeignKey(OrderItem, on_delete=models.CASCADE, related_name="iitem_order_item")
+
+    def subtotal(self):
+        return self.order_item.quantity * self.order_item.unit_price
+
+    class Meta:
+        db_table = 'public\".\"invoice_item'
+
+
 class Purchase(models.Model):
     supplier = models.ForeignKey(
         Supplier, on_delete=models.CASCADE, related_name='purchase_supplier')
-    order = models.ForeignKey(
-        Order, on_delete=models.CASCADE, related_name='purchase_order')
-    date_added = models.DateTimeField(default=timezone.now)
-    added_by = models.BigIntegerField(null=True, blank=True)
-    deleted = models.BooleanField(default=False)
-
+    invoice = models.ForeignKey(
+        Invoice, on_delete=models.CASCADE, related_name='purchase_invoice')
+    
     class Meta:
         db_table = 'public\".\"purchase'
 
@@ -195,7 +239,6 @@ class Stock(models.Model):
     class Meta:
         db_table = 'public\".\"inv_stock'
 
-
 class PurchaseRequisition(models.Model):
     STATUSES = (
         ('pending', 'Pending'),
@@ -203,24 +246,21 @@ class PurchaseRequisition(models.Model):
         ('approved', 'Approved'),
         ('closed', 'Closed'),
     )
-    heading = models.TextField(null=True, blank=True)
     notes = models.TextField(null=True, blank=True)
     approved_notes = models.TextField(null=True, blank=True)
     status = models.CharField(
         max_length=50, default='pending', choices=STATUSES)
-    record_date = models.DateTimeField(default=timezone.now)
     approved_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE,null=True, blank=True, related_name='pr_approved_by')
     approved_date = models.DateTimeField(null=True, blank=True)
     order = models.ForeignKey(
         Order, on_delete=models.CASCADE, null=True, blank=True, related_name='pr_order')
-    branch = models.ForeignKey(
-        CompanyBranch, on_delete=models.CASCADE, related_name='pr_btanch')
-    added_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
-                                 related_name='pr_addedby', null=False, blank=False)
-
+    
     class Meta:
         db_table = 'public\".\"purchase_requisition'
+        
+'''
+
 
 
 class RequisitionItem(models.Model):
@@ -287,7 +327,7 @@ class SaleRequisitionItem(models.Model):
     class Meta:
         db_table = 'public\".\"sale_requisition_item'
 
-
+'''
 class OrderPayment(models.Model):
     quantity = models.FloatField(null=False, blank=False)
     total_discount = models.FloatField(null=False, blank=False, default=0)
@@ -322,6 +362,7 @@ class PumpProduct(models.Model):
     name = models.TextField(null=False, blank=False)
     pump =  models.ForeignKey(Pump, on_delete=models.CASCADE, related_name='pp_pump')
     product =  models.ForeignKey(ProductVariation, on_delete=models.CASCADE, related_name='pp_product')
+    is_active = models.BooleanField(default=True)
     added_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='pp_addedby')
     date_added = models.DateTimeField(null=True, blank=True)
@@ -397,7 +438,7 @@ class DipReading(models.Model):
     date_added = models.DateTimeField(null=True, blank=True)
     shift =  models.ForeignKey(Shift, on_delete=models.CASCADE, related_name='dipr_shift')
     record_date = models.DateTimeField(default=timezone.now)
-    product =  models.ForeignKey(Product, on_delete=models.CASCADE, related_name='dipr_product',null=True,blank=True)
+    product =  models.ForeignKey(ProductVariation, on_delete=models.CASCADE, related_name='dipr_product',null=True,blank=True)
     added_by  = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='dipr_addedby')
     class Meta:

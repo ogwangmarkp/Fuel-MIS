@@ -50,6 +50,8 @@ class CustomersView(viewsets.ModelViewSet):
     serializer_class = CustomerSerializer
     filter_backends = (SearchFilter, OrderingFilter, DjangoFilterBackend, )
     search_fields = ('name', 'email','telephone_1','vehicle_no')
+    filterset_fields = ['status']
+    ordering_fields = 'name'
 
     def get_queryset(self):
         company_id = get_current_user(self.request, 'company_id', 1)

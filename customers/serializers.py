@@ -46,6 +46,7 @@ class CustomerTypeFieldSerializer(serializers.ModelSerializer):
 class CustomerSerializer(serializers.ModelSerializer):
     company = serializers.PrimaryKeyRelatedField(read_only=True, required=False)
     customer_no = serializers.CharField(read_only=True)
+    branch_name = serializers.CharField(read_only=True,source="branch.name")
     added_by = serializers.CharField(read_only=True)
 
     class Meta:

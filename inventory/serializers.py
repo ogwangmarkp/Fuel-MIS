@@ -38,7 +38,39 @@ class ProductSerializer(serializers.ModelSerializer):
     added_by = serializers.CharField(read_only=True)
     featured_image_url = serializers.SerializerMethodField()
     tags = serializers.SerializerMethodField()
+    description = serializers.SerializerMethodField()
+    discount = serializers.SerializerMethodField()
+    regular_price = serializers.SerializerMethodField()
+    unit_of_measure = serializers.SerializerMethodField() 
 
+    def get_description(self, obj):
+        product_variation = ProductVariation.objects.filter(product__id=obj.id,is_default=True).first()
+        if product_variation:
+            return product_variation.description
+        return ''
+
+    def get_unit_of_measure(self, obj):
+        product_variation = ProductVariation.objects.filter(product__id=obj.id,is_default=True).first()
+        if product_variation:
+            return product_variation.unit_of_measure
+        return ''
+
+    def get_regular_price(self, obj):
+        product_variation = ProductVariation.objects.filter(product__id=obj.id,is_default=True).first()
+        if product_variation:
+            pricing = ProductPricing.objects.filter(variation=product_variation).first()
+            if pricing:
+                return pricing.regular_price
+        return 0
+    
+    
+    def get_discount(self, obj):
+        product_variation = ProductVariation.objects.filter(product__id=obj.id,is_default=True).first()
+        if product_variation:
+            return product_variation.discount
+        return 0
+    
+    
     def get_tags(self, obj):
         all_tags = ProductAssignedTag.objects.filter(product__id=obj.id,deleted=False)
         if all_tags:
@@ -62,7 +94,14 @@ class ProductVariationSerializer(serializers.ModelSerializer):
     added_by = serializers.CharField(read_only=True)
     company_address = serializers.SerializerMethodField()
     company_contact = serializers.SerializerMethodField()
+    regular_price = serializers.SerializerMethodField()
 
+    def get_regular_price(self, obj):
+        pricing = ProductPricing.objects.filter(variation=obj).first()
+        if pricing:
+            return pricing.regular_price
+        return 0
+    
     def get_stock_balance(self, obj):
         branch_id = self.context.get('branch_id', None)
         stock_total = get_stock_balance_by_product_variation(obj.id,branch_id)
@@ -85,6 +124,20 @@ class ProductVariationSerializer(serializers.ModelSerializer):
         model = ProductVariation
         fields = '__all__'
 
+
+class ProductPricingSerializer(serializers.ModelSerializer):
+    added_by = serializers.CharField(read_only=True)
+    unit_of_measure = serializers.CharField(read_only=True,source="variation.unit_of_measure")
+    variation_name = serializers.CharField(read_only=True,source="variation.variation_name")
+    product_name = serializers.CharField(read_only=True,source="variation.product.product_name")
+    enable_variation = serializers.CharField(read_only=True,source="variation.product.enable_variation")
+    is_default = serializers.CharField(read_only=True,source="variation.is_default")
+
+    class Meta:
+        model = ProductPricing
+        fields = '__all__'
+
+
 class StockSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(read_only=True,source="order_item.product_variation.product.category.category_name")
     product_name = serializers.CharField(read_only=True,source="order_item.product_variation.product.product_name")
@@ -105,17 +158,23 @@ class StockSerializer(serializers.ModelSerializer):
         model = Stock
         fields = '__all__'
 
+
 class OrderItemSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(read_only=True,source="product_variation.product.product_name")
     variation_name = serializers.CharField(read_only=True,source="product_variation.variation_name")
+    total_amount = serializers.SerializerMethodField()
+    
+    def get_total_amount(self, obj):
+        return (obj.quantity * obj.price)
+    
     class Meta:
         model = OrderItem
         fields = '__all__'
 
+
 class OrderSerializer(serializers.ModelSerializer):
     branch = serializers.CharField(read_only=True)
     added_by = serializers.CharField(read_only=True)
-    supplier_details = serializers.SerializerMethodField()
     order_extra_details = serializers.SerializerMethodField()
 
     def get_order_extra_details(self, obj):
@@ -131,7 +190,7 @@ class OrderSerializer(serializers.ModelSerializer):
         return {
             "amount":amount,
             "discount":discount,
-            "total":amount+discount,
+            "total":amount-discount,
             "items_count":items_count,
             "items":OrderItemSerializer(order_items,many=True, read_only=True).data}
 
@@ -146,7 +205,93 @@ class OrderSerializer(serializers.ModelSerializer):
         model = Order
         fields = '__all__'
 
+class PurchaseSerializer(serializers.ModelSerializer):
+    
+    class Meta:
+        model = Purchase
+        fields = '__all__'
 
+
+class InvoiceItemSerializer(serializers.ModelSerializer):
+    heading = serializers.CharField(read_only=True,source='order.heading')
+    invoice_item_details = serializers.SerializerMethodField()
+  
+    def get_invoice_item_details(self, obj):
+        return OrderItemSerializer(obj.order_item,read_only=True).data
+    
+    class Meta:
+        model = InvoiceItem
+        fields = '__all__'
+
+
+class InvoiceSerializer(serializers.ModelSerializer):
+    invoice_items = serializers.SerializerMethodField()
+    heading = serializers.CharField(read_only=True,source='order.heading')
+    order_number = serializers.CharField(read_only=True,source='order.order_number')
+    invoice_number = serializers.CharField(read_only=True)
+    added_by = serializers.CharField(read_only=True)
+    invoice_items = serializers.SerializerMethodField()
+    supplier_details = serializers.SerializerMethodField()
+    
+    def get_invoice_extra_details(self, obj):
+        amount = 0
+        discount = 0
+        items = []
+        invoice_items = InvoiceItem.objects.filter(invoice=obj)
+        if invoice_items:
+            for invoice_item in invoice_items:
+                items.append(invoice_item.order_item)
+                amount += (invoice_item.order_item.quantity * invoice_item.order_item.price)
+                discount += invoice_item.order_item.discount
+
+        items_count = len(items)
+
+        
+        return {
+            "amount":amount,
+            "discount":discount,
+            "total":amount-discount,
+            "items_count":items_count,
+            "items":OrderItemSerializer(items,many=True, read_only=True).data}
+    
+    def get_invoice_items(self, obj):
+        invoice_items = InvoiceItem.objects.filter(invoice=obj)
+        return InvoiceItemSerializer(invoice_items,many=True, read_only=True).data
+    
+    def get_supplier_details(self, obj):
+        if obj.order.order_type == 'purchases':
+            purchase = Purchase.objects.filter(invoice=obj).first()
+            if purchase:
+                return SupplierSerializer(purchase.supplier).data
+        return {}
+    
+    class Meta:
+        model = Invoice
+        fields = '__all__'
+
+class PurchaseRequisitionSerializer(serializers.ModelSerializer):
+    branch = serializers.CharField(read_only=True)
+    added_by = serializers.CharField(read_only=True,source='order.added_by')
+    heading = serializers.CharField(read_only=True,source='order.heading')
+    order_number = serializers.CharField(read_only=True,source='order.order_number')
+    requisition_items = serializers.SerializerMethodField()
+    invoices = serializers.SerializerMethodField()
+     
+    def get_requisition_items(self, obj):
+        req_items = OrderItem.objects.filter(order=obj.order)
+        return OrderItemSerializer(req_items,many=True, read_only=True).data
+    
+    def get_invoices(self, obj):
+        invoice_items = Invoice.objects.filter(order=obj.order)
+        return InvoiceSerializer(invoice_items,many=True, read_only=True).data
+    
+    class Meta:
+        model = PurchaseRequisition
+        fields = '__all__'
+
+
+
+'''
 class RequisitionItemSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(read_only=True,source="product_variation.product.product_name")
     variation_name = serializers.CharField(read_only=True,source="product_variation.variation_name")
@@ -244,14 +389,30 @@ class  SaleRequisitionSerializer(serializers.ModelSerializer):
     class Meta:
         model = SaleRequisition
         fields = '__all__'
+'''
+class PumpProductSerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField(read_only=True)
+    date_added = serializers.DateTimeField(read_only=True)
+    pump_name = serializers.CharField(read_only=True,source='pump.name')
+    product_name = serializers.CharField(read_only=True,source='product.product.product_name')
+    added_by = serializers.CharField(read_only=True)
 
- 
+    class Meta:
+        model = PumpProduct
+        fields = '__all__'
+
 class PumpSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(read_only=True)
+    branch = serializers.CharField(read_only=True)
     date_added = serializers.DateTimeField(read_only=True)
     added_by = serializers.IntegerField(read_only=True)
     branch_name = serializers.CharField(read_only=True,source='branch.name')
-
+    pump_products = serializers.SerializerMethodField()
+    
+    def get_pump_products(self, obj):
+        pump_products = PumpProduct.objects.filter(pump=obj)
+        return PumpProductSerializer(pump_products,read_only=True, many=True).data
+    
     class Meta:
         model = Pump
         fields = '__all__'
@@ -280,16 +441,7 @@ class PumpReadingSerializer(serializers.ModelSerializer):
         model = PumpReading
         fields = '__all__'
 
-class PumpProductSerializer(serializers.ModelSerializer):
-    id = serializers.IntegerField(read_only=True)
-    date_added = serializers.DateTimeField(read_only=True)
-    pump_name = serializers.CharField(read_only=True,source='pump.name')
-    product_name = serializers.CharField(read_only=True,source='product.product.product_name')
-    added_by = serializers.CharField(read_only=True)
 
-    class Meta:
-        model = PumpProduct
-        fields = '__all__'
 
 class ShiftSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(read_only=True)

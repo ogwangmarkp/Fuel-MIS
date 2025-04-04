@@ -1,6 +1,30 @@
 
 from django.db.models import Sum
-from .models import Stock,Order,OrderItem
+from .models import Stock,Order,OrderItem,Invoice
+from companies.models import  CompanyBranch
+from datetime import datetime
+
+def generate_order_number(branch_id):
+    branch = CompanyBranch.objects.filter(id=branch_id).first()
+    order_number_prefix = ''
+
+    if branch and branch.order_prefix:
+        order_number_prefix = str(branch.order_prefix)
+    
+    code = Order.objects.filter(branch=branch).count()
+    return f"{order_number_prefix}{code}"
+
+
+def generate_invoice_number(branch_id,order_id):
+    branch = CompanyBranch.objects.filter(id=branch_id).first()
+    invoice_count = Invoice.objects.filter(order__id=order_id).count() + 1
+    invoice_number_prefix = ''
+    
+    if branch and branch.invoice_prefix:
+        invoice_number_prefix = str(branch.invoice_prefix)
+
+    return f"{invoice_number_prefix}{order_id}-{invoice_count}-{datetime.now().strftime('%Y%m%d')}"
+
 
 def get_stock_balance_by_product_variation(product_variation_id,branch_id):
     stock_total  = 0

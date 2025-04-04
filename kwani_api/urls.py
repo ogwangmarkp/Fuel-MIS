@@ -81,9 +81,8 @@ router.register(r'inv-product-categories', inventory_views.ProductCategoriesView
 router.register(r'inv-product-tags', inventory_views.ProductTagsViewSet, basename='inv-product-tags')
 router.register(r'inv-products', inventory_views.ProductsViewSet, basename='inv-products')
 router.register(r'inv-product-variations', inventory_views.ProductVariationsViewSet, basename='inv-product-variations')
-
+router.register(r'product-pricing', inventory_views.ProductPricingViewSet, basename='product-pricing')
 router.register(r'pos-product-tags', pos_views.PosProductTagsViewSet, basename='pos-product-tags')
-
 router.register(r'service-categories', service_views.ServiceCategoriesViewSet, basename='service-categories')
 router.register(r'service-tags', service_views.ServiceTagsViewSet, basename='service-tags')
 router.register(r'services', service_views.ServicesViewSet, basename='services')
@@ -107,7 +106,10 @@ router.register(r'shifts', inventory_views.ShiftsView, basename='shifts')
 router.register(r'stock-list', inventory_views.StocksViewSet, basename='stock-list')
 router.register(r'purchase-requisition-list', inventory_views.PurchaseRequisitionsViewSet, basename='purchase-requisition-list')
 router.register(r'order-list', inventory_views.OrdersViewSet, basename='order-list')
-router.register(r'sale-requisition-list', inventory_views.SaleRequisitionsViewSet, basename='sale-requisition-list')
+router.register(r'invoice-list', inventory_views.InvoicesViewSet, basename='invoice-list')
+
+
+#router.register(r'sale-requisition-list', inventory_views.SaleRequisitionsViewSet, basename='sale-requisition-list')
 
 #router.register(r'seasons', inventory_views.OrganisationSeasonViewSet, basename='organisation-season')
 
@@ -151,9 +153,12 @@ urlpatterns = [
     # Pump Updates
     path('api/capture-pump-readings/', inventory_views.CapturePumpReadingView.as_view()),
     path('api/pump-summarry/', inventory_views.PumpSummaryView.as_view()),
+    path('api/branch-summary/', inventory_views.BranchSummaryView.as_view()),
     path('api/cash-payments/', inventory_views.CashTransationView.as_view()),
     path('api/generate-payroll/', hr_views.GeneratePayrollView.as_view()),
     path('api/capture-salaries/', hr_views.CaptureSalriesView.as_view()),
     path('api/staff-salary-balance/', hr_views.StaffSalaryBalanceView.as_view()),
+    path('api/switch-branch/', companies_views.SwitchBranch.as_view()), 
+    
 ]
 

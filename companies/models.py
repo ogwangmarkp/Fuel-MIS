@@ -94,6 +94,8 @@ class CompanyBranch(models.Model):
     added_by = models.BigIntegerField(null=True, blank=True)
     status  =  models.CharField(max_length=25, null=True, blank=True)
     address =  models.CharField(max_length=255, null=True, blank=True)
+    order_prefix =  models.CharField(max_length=255, null=True, blank=True)
+    invoice_prefix =  models.CharField(max_length=255, null=True, blank=True)
     company =  models.ForeignKey(Company, on_delete=models.CASCADE, related_name='company_branches')
     inter_branch_chart = models.BigIntegerField(blank=True, null=True)
 

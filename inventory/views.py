@@ -12,12 +12,12 @@ from django.db.models import Q
 from django.utils import timezone
 from rest_framework.pagination import PageNumberPagination
 from kwani_api.utils import get_current_user
-from ledgers.models import AccountsChart, LedgerTransaction, CreditorSupplies,CashAccount
+from ledgers.models import AccountsChart, LedgerTransaction, CreditorSupplies,CashAccount, PendingExpense
 from ledgers.serializers import AccountsChartSerializer
 from ledgers.helper import generate_reference_no, get_transactional_charts,get_coa_by_code, generate_chart_code
 from users.models import User
-from django.db.models.functions import Coalesce
-from django.db.models import F
+from django.db.models import F, Subquery, OuterRef, Sum, Count,  Case, When, Value, FloatField
+from django.db.models.functions import Coalesce,Round
 
 class ProductCategoriesViewSet(viewsets.ModelViewSet):
     serializer_class = ProductCategorySerializer
@@ -61,33 +61,60 @@ class ProductsViewSet(viewsets.ModelViewSet):
         if saved_product:
             ProductVariation.objects.create(**{
                 "variation_name" : saved_product.product_name,
-                "description":saved_product.description,
-                "regular_price" : saved_product.regular_price,
-                "unit_of_measure":saved_product.unit_of_measure,
+                "description":self.request.data.get('description'),
+                "unit_of_measure":self.request.data.get('unit_of_measure'),
+                "is_default":True,
                 "product" : saved_product,
                 "added_by":self.request.user
             })
 
+            '''if saved_variation:
+                ProductPricing.objects.create(**{
+                    "variation" :saved_variation,
+                    "regular_price" :self.request.data.get('regular_price'),
+                    "added_by":self.request.user
+                }) '''
+
 
     def perform_update(self, serializer):
         updated_product = serializer.save()
-        if updated_product and updated_product.enable_variation == False:
+        if updated_product:
             # Get the first variation as the default variation
-            varation = ProductVariation.objects.filter(**{'product':updated_product, "deleted": False}).first()
+            variation = ProductVariation.objects.filter(**{'product':updated_product, "is_default": True}).first()
             # If variation exists, update it's amount and unit of measure
-            if varation:
-                varation.regular_price = updated_product.regular_price
-                varation.unit_of_measure = updated_product.unit_of_measure
-                varation.save()
+            if variation:
+                variation.description = self.request.data.get('description')
+                variation.unit_of_measure = self.request.data.get('unit_of_measure')
+                variation.discount = self.request.data.get('discount')
+                variation.is_default = True
+                variation.save()
+                ''' pricing = ProductPricing.objects.filter(**{'variation':variation}).first()
+                if pricing:
+                    pricing.regular_price = self.request.data.get('regular_price')
+                    pricing.save()
+                else:
+                    ProductPricing.objects.create(**{
+                        "variation" :saved_variation,
+                        "regular_price" :self.request.data.get('regular_price'),
+                        "added_by":self.request.user
+                    }) '''
             else:
                 ProductVariation.objects.create(**{
                     "variation_name" : updated_product.product_name,
-                    "description":updated_product.description,
-                    "regular_price" : updated_product.regular_price,
-                    "unit_of_measure":updated_product.unit_of_measure,
+                   "description":self.request.data.get('description'),
+                    "unit_of_measure":self.request.data.get('unit_of_measure'),
+                    "discount":self.request.data.get('discount'),
+                    "is_default":True,
                     "product" : updated_product,
                     "added_by":self.request.user
                 })
+
+                ''' if saved_variation:
+                    ProductPricing.objects.create(**{
+                        "variation" :saved_variation,
+                        "regular_price" :self.request.data.get('regular_price'),
+                        "added_by":self.request.user
+                    }) '''
 
 
 class ProductVariationsViewSet(viewsets.ModelViewSet):
@@ -96,13 +123,50 @@ class ProductVariationsViewSet(viewsets.ModelViewSet):
     search_fields = ('variation_name','product__product_name' )
 
     def get_queryset(self):
+        query_filter = {"deleted": False}
         product_id = self.request.query_params.get('product', None)
+        status = self.request.query_params.get('status', 'no-default')
+        if status == 'no-default':
+            query_filter['is_default'] = False
+
         if product_id:
-            return ProductVariation.objects.filter(**{'product__id': product_id, "deleted": False}).order_by('-id')
-        return ProductVariation.objects.filter(**{"deleted": False}).order_by('-id')
+            query_filter['product__id'] = product_id
+
+        return ProductVariation.objects.filter(**query_filter).order_by('-id')
+
 
     def perform_create(self, serializer):
         serializer.save(added_by=self.request.user)
+
+
+class ProductPricingViewSet(viewsets.ModelViewSet):
+    serializer_class = ProductPricingSerializer
+    filter_backends = (SearchFilter, OrderingFilter, DjangoFilterBackend, )
+    search_fields = ('variation__variation_name','variation__product__product_name' )
+    filterset_fields = ['status',]
+    
+    def get_queryset(self):
+        company_id = get_current_user(self.request, 'company_id', None)
+        return ProductPricing.objects.filter(**{
+            "deleted": False,
+            "variation__product__company__id":company_id
+        }).order_by('-id')
+
+    def perform_create(self, serializer):
+        serializer.save(added_by=self.request.user)
+    
+    def perform_update(self, serializer):
+        status = self.request.data.get('status',None)
+        saved_price = serializer.save(added_by=self.request.user)
+        if saved_price:
+            if status== 'approved':
+                all_pricings = ProductPricing.objects.filter(variation=saved_price.variation).exclude(id=saved_price.id)
+                if all_pricings:
+                    for all_pricing in all_pricings:
+                        all_pricing.status = 'inactive'
+                        all_pricing.save()
+                
+
 
 
 class StocksViewSet(viewsets.ModelViewSet):
@@ -171,17 +235,38 @@ class OrdersViewSet(viewsets.ModelViewSet):
         status = self.request.data.get('status')
         order_type = self.request.data.get('order_type')
         record_date = self.request.data.get('record_date')
-        payment_method = self.request.data.get('payment_method')
+        payment_method = self.request.data.get('payment_method',None)
         order_items = self.request.data.get('order_items')
+        notes = self.request.data.get('notes',None)
         company_id = get_current_user(self.request, 'company_id', None)
         branch_id = get_current_user(self.request, 'branch_id', None)
+        order_number = generate_order_number(branch_id)
+
         saved_order = serializer.save(
-            branch_id=branch_id, added_by=self.request.user)
+            branch_id=branch_id, 
+            added_by=self.request.user,
+            order_number=order_number
+        )
         
         if saved_order:
-            if order_type == 'Purchases':
-                supplier_id = self.request.data.get('supplier')
-                credit_chart_id = self.request.data.get('credit_chart')
+            if order_type == 'purchases':
+                PurchaseRequisition.objects.create(**{
+                    "status": 'pending',
+                    "notes": notes,
+                    "order": saved_order
+                })
+
+                for order_item in order_items:
+                    OrderItem.objects.create(**{
+                        "product_variation_id":order_item['id'],
+                        "quantity": order_item['quantity'],
+                        "price": order_item['regular_price'],
+                        "order": saved_order,
+                        "added_by": self.request.user
+                    })
+
+                ''' supplier_id = self.request.data.get('supplier',None)
+                credit_chart_id = self.request.data.get('credit_chart',None)
                 requisition_id =  self.request.data.get('requisition',None)
                 supplier = Supplier.objects.filter(chart__id=supplier_id).first()
                 requisition = PurchaseRequisition.objects.filter(id=requisition_id).first()
@@ -192,7 +277,7 @@ class OrdersViewSet(viewsets.ModelViewSet):
 
                 purchase = Purchase(
                     supplier=supplier, order=saved_order, added_by=self.request.user.id)
-                purchase.save()
+                purchase.save() 
                 
                 for order_item in order_items:
                     saved_item = OrderItem.objects.create(**{
@@ -202,6 +287,7 @@ class OrdersViewSet(viewsets.ModelViewSet):
                         "order": saved_order,
                         "added_by": self.request.user
                     })
+
                     total = float(order_item['quantity']) * float(order_item['price'])
 
                     if status == 'Processed' and saved_item:
@@ -224,9 +310,9 @@ class OrdersViewSet(viewsets.ModelViewSet):
                         saved_trans = transaction.save()
                         if saved_trans:
                             saved_item.transaction = saved_trans
-                            saved_item.save() 
+                            saved_item.save()  '''
             
-            if order_type == 'Sales':
+            '''if order_type == 'Sales':
                 customer_id = self.request.data.get('customer',None)
                 debit_chart_id = self.request.data.get('debit_chart',None)
                 requisition_id =  self.request.data.get('requisition',None)
@@ -293,7 +379,7 @@ class OrdersViewSet(viewsets.ModelViewSet):
                             saved_item.discount = discount
                             saved_item.transaction = saved_trans
                             saved_item.save() 
-
+            '''
     def process_auto_approval(self,requisition,order,request_data):
         order.status = 'Pending'
         order.save()
@@ -314,7 +400,61 @@ class OrdersViewSet(viewsets.ModelViewSet):
                 req_item.save()
         req_items = SaleRequisitionItem.objects.filter(sale_requisition=requisition)
         return SaleRequisitionItemSerializer(req_items,many=True, read_only=True).data
+    
+class PurchaseRequisitionsViewSet(viewsets.ModelViewSet):
+    serializer_class = PurchaseRequisitionSerializer
+    filter_backends = (SearchFilter, OrderingFilter, DjangoFilterBackend, )
+    filterset_fields = ['status']
 
+    def get_queryset(self):
+        branch_id = get_current_user(self.request, 'branch_id', None)
+        filter_array = {'order__branch__id': branch_id}
+        return PurchaseRequisition.objects.filter(**filter_array).order_by('-id')
+    
+    def perform_update(self, serializer):
+        serializer.save(approved_by=self.request.user)
+
+class InvoicesViewSet(viewsets.ModelViewSet):
+    serializer_class = InvoiceSerializer
+    filter_backends = (SearchFilter, OrderingFilter, DjangoFilterBackend, )
+    filterset_fields = ['status']
+
+    def get_queryset(self):
+        branch_id = get_current_user(self.request, 'branch_id', None)
+        filter_array = {'order__branch__id': branch_id}
+        order_type = self.request.query_params.get('order_type', None)
+        
+        if order_type == 'purchases':
+           filter_array['order__order_type'] = order_type
+        
+        return Invoice.objects.filter(**filter_array).order_by('-id')
+    
+
+    def perform_create(self, serializer):
+        order_id = self.request.data.get('order')
+        order_items = self.request.data.get('order_items')
+        supplier = self.request.data.get('supplier')
+        branch_id = get_current_user(self.request, 'branch_id', None)
+        invoice_number = generate_invoice_number(branch_id,order_id)
+        saved_invoice = serializer.save(added_by=self.request.user,invoice_number=invoice_number)
+        
+        if saved_invoice:
+            purchase = Purchase(supplier_id=supplier, invoice=saved_invoice)
+            purchase.save() 
+
+            if order_items:
+                for order_item in order_items:
+                    InvoiceItem.objects.create(**{
+                        "invoice":saved_invoice,
+                        "order_item_id":order_item['id']
+                    })
+    
+
+    def perform_update(self, serializer):
+        serializer.save(approved_by=self.request.user)
+
+
+'''
 class PurchaseRequisitionsViewSet(viewsets.ModelViewSet):
     serializer_class = PurchaseRequisitionSerializer
     filter_backends = (SearchFilter, OrderingFilter, DjangoFilterBackend, )
@@ -388,7 +528,7 @@ class SaleRequisitionsViewSet(viewsets.ModelViewSet):
                     req_item.discount_at = float(req_item.product_variation.product.discount)
                     print("req_item.product_variation.product.discount",req_item.product_variation.product.discount)
                     req_item.save()
-                   
+'''                   
 
 class StockTakingView(APIView):
 
@@ -432,17 +572,40 @@ class PumpsView(viewsets.ModelViewSet):
     serializer_class = PumpSerializer
     
     def get_queryset(self):
-        company_id = get_current_user(self.request, 'company_id', None)
-        branch = self.request.query_params.get('branch',None)
-        filter_query = {}
-        filter_query["branch__company__id"] = company_id
-        if branch:
-                filter_query["branch__id"] = branch
-        return Pump.objects.filter(**filter_query)
+        branch_id = get_current_user(self.request, 'branch_id', None)
+        return Pump.objects.filter(branch__id=branch_id)
 
     def perform_create(self, serializer):
-        serializer.save(added_by=self.request.user.id)
+        branch_id = get_current_user(self.request, 'branch_id', None)
+        serializer.save(added_by=self.request.user.id,branch_id=branch_id)
+    
+    def perform_update(self, serializer):
+        products = self.request.data.get('products',[])
+        updated_pump = serializer.save()
+        if updated_pump:
+            old_products = PumpProduct.objects.filter(pump=updated_pump)
+            if old_products:
+                for old_product in old_products:
+                    old_product.is_active = False 
+                    old_product.save()
 
+            for product in products:
+                pump_products = PumpProduct.objects.filter(pump=updated_pump,product__id=product['id'])
+                if pump_products:
+                    for pump_product in pump_products:
+                        pump_product.name = product['name']
+                        pump_product.is_active = product['is_active'] 
+                        pump_product.save()
+                else:
+                    PumpProduct.objects.create(**{
+                       'product_id':product['id'], 
+                       'name':product['name'],  
+                       'is_active':product['is_active'], 
+                       'pump':updated_pump,
+                       'added_by': self.request.user             
+                    })
+
+            
 class PumpAssignmentsView(viewsets.ModelViewSet):
     serializer_class = PumpAssignmentSerializer
     
@@ -524,7 +687,7 @@ class CapturePumpReadingView(APIView):
         payment_list = []
 
         pumps = Pump.objects.filter(**{"branch__id":branch_id})
-        dip_products = Product.objects.filter(**{"company__id":company_id})
+        dip_products = ProductVariation.objects.filter(**{"deleted":False,"product__company__id":company_id})
         attendants = CashAccount.objects.filter(teller__user_branch__id=branch_id)
         ''' if attendants:
             for attendant in attendants:
@@ -539,90 +702,129 @@ class CapturePumpReadingView(APIView):
                 else:
                     payment_list.append({"id":0,"teller_id":attendant.teller.id,"teller":f'{attendant.teller.first_name} {attendant.teller.last_name}',"amount":0})
         '''
-        pump_reading = PumpReading.objects.filter(
-            record_date__date__gte=record_date,
-            record_date__date__lte=record_date,
-            shift__name__iexact=shift,
-            shift__branch__id=branch_id
-        ).first() 
-        
-        if pump_reading:
-            status = pump_reading.status
-            is_closed = pump_reading.is_closed
         
         if dip_products:
             for dip_product in dip_products:
+                all_dip_reading_items = DipReading.objects.filter(
+                    product=dip_product,
+                    record_date__date__lte=record_date,
+                    shift__branch__id=branch_id
+                ).order_by('-id')
+                
                 dip_reading_item = DipReading.objects.filter(
                 product=dip_product,
                 record_date__date__gte=record_date,
                 record_date__date__lte=record_date,
-                shift__name__iexact=shift
+                shift__name__iexact=shift,
+                shift__branch__id=branch_id
                 ).order_by('id').first()
+                
                 if dip_reading_item:
                     dip_list.append({
                     "id":dip_reading_item.id,
                     "product_id":dip_product.id,
-                    "product_name":dip_product.product_name,
+                    "product_name":dip_product.product.product_name,
                     "dip1":dip_reading_item.dip1,
                     "dip2":dip_reading_item.dip2,
-                    "rtt":dip_reading_item.rtt
+                    "rtt":dip_reading_item.rtt,
+                    "is_exists":True,
+                    "count":len(all_dip_reading_items) - 1
                     })
                 else:
-                    dip_list.append({
-                    "id":0,
-                    "product_id":dip_product.id,
-                    "product_name":dip_product.product_name,
-                    "dip1":"",
-                    "dip2":"",
-                    "rtt":0
-                    })
+                    # Check if initial product readings already exists
+                    is_exists = False
+                    dip1 = ""
                     
+                    # Update the initial dip readings
+                    if all_dip_reading_items:
+                       dip_reading_item = all_dip_reading_items[0]
+                       is_exists = True
+                       dip1 = dip_reading_item.dip2
+
+                    dip_list.append({
+                        "id":0,
+                        "product_id":dip_product.id,
+                        "product_name":dip_product.product.product_name,
+                        "dip1":dip1,
+                        "dip2":"",
+                        "rtt":0,
+                        "is_exists":is_exists,
+                        "count":len(all_dip_reading_items)
+                    })
+                
 
         if pumps:
             for pump in pumps:
                 # Retrive proucts
                 products = []
-                pump_products = PumpProduct.objects.filter(pump=pump)
+                pump_products = PumpProduct.objects.filter(pump=pump,is_active=True)
                 if pump_products:
                    for pump_product in pump_products:
+                        regular_price = 0.0
+                        pricing = ProductPricing.objects.filter(variation=pump_product.product,status='approved').first()
+                        if pricing:
+                            regular_price = pricing.regular_price
+
+                        # All existing readings
+                        all_pump_reading_items = PumpReadingItem.objects.filter(
+                            pump_product=pump_product,
+                            pump_reading__record_date__date__lte=record_date,
+                            pump_reading__shift__branch__id=branch_id
+                        ).order_by('-id')
                         # Retrive pump product readings
                         pump_reading_item = PumpReadingItem.objects.filter(
                             pump_product=pump_product,
                             pump_reading__record_date__date__gte=record_date,
                             pump_reading__record_date__date__lte=record_date,
-                            pump_reading__shift__name__iexact=shift).first()
+                            pump_reading__shift__name__iexact=shift,
+                            pump_reading__shift__branch__id=branch_id).first()
                         
                         if pump_reading_item:
                             closing = pump_reading_item.closing if pump_reading_item.closing else 0
                             opening = pump_reading_item.opening if pump_reading_item.opening else 0
+                            
                             products.append({
-                            "id":pump_reading_item.id,
-                            "pump_reading":pump_reading_item.pump_reading.id,
-                            "pump_product":pump_product.id,
-                            "product_name":pump_product.product.product.product_name,
-                            "name":pump_product.name,
-                            "opening":pump_reading_item.opening,
-                            "closing":pump_reading_item.closing,
-                            "price":pump_product.product.regular_price,
-                            "sales":closing - opening,
-                            "amount":(closing - opening) * pump_product.product.regular_price,
-                            "attendant":pump_reading_item.attendant.id if pump_reading_item.attendant else '',
+                                "id":pump_reading_item.id,
+                                "pump_reading":pump_reading_item.pump_reading.id,
+                                "pump_product":pump_product.id,
+                                "product_name":pump_product.product.product.product_name,
+                                "name":pump_product.name,
+                                "opening":pump_reading_item.opening,
+                                "closing":pump_reading_item.closing,
+                                "price":regular_price,
+                                "sales":closing - opening,
+                                "amount":(closing - opening) * regular_price,
+                                "attendant":pump_reading_item.attendant.id if pump_reading_item.attendant else '',
+                                "is_exists":True,
+                                "count":len(all_pump_reading_items) - 1
                             })
                         else:
+                            # Check if initial product readings already exists
+                            is_exists = False
+                            opening = ""
+                            # Update the initial dip readings
+                            if all_pump_reading_items:
+                                pump_reading_item = all_pump_reading_items[0]
+                                is_exists = True
+                                opening = pump_reading_item.closing
+
                             products.append({
-                            "id":0,
-                            "pump_reading":"",
-                            "pump_product":pump_product.id,
-                            "product_name":pump_product.product.product.product_name,
-                            "name":pump_product.name,
-                            "opening":"",
-                            "closing":"",
-                            "price":pump_product.product.regular_price,
-                            "sales":0,
-                            "amount":0,
-                            "attendant":"",
+                                "id":0,
+                                "pump_reading":"",
+                                "pump_product":pump_product.id,
+                                "product_name":pump_product.product.product.product_name,
+                                "name":pump_product.name,
+                                "opening":opening,
+                                "closing":"",
+                                "price":regular_price,
+                                "sales":0,
+                                "amount":0,
+                                "attendant":"",
+                                "is_exists":is_exists,
+                                "count":len(all_pump_reading_items)
                             })
-                pump_list.append({"id":pump.id,"pump_name":pump.name,"products":products})
+                if len(products) > 0:
+                    pump_list.append({"id":pump.id,"pump_name":pump.name,"products":products})
         
         return Response({"pump_list":pump_list,"dip_list":dip_list,"payments":payment_list,"status":status,"is_closed":is_closed})
     
@@ -640,15 +842,13 @@ class CapturePumpReadingView(APIView):
                 name__iexact=shift_name,
                 branch__id=branch_id
             ).first()
-            print("shift---",shift.name)
-            print("shift_name",shift_name)
             pump_reading = PumpReading.objects.filter(
                 record_date__date__gte=record_date,
                 record_date__date__lte=record_date,
                 shift=shift
             ).first()
 
-            if not pump_reading and status != 'closed':
+            if not pump_reading:
                 pump_reading = PumpReading.objects.create(**{
                     "record_date":record_date,
                     "status":status,
@@ -656,18 +856,15 @@ class CapturePumpReadingView(APIView):
                     "added_by": self.request.user
                 })
 
-            if status == 'closed':
-               pump_reading.is_closed = True
-               pump_reading.save()
 
-            if status != 'closed':
+            if  pump_reading:
                 pump_reading.status = status
-                pump_reading.is_closed = False
                 pump_reading.save()
+
                 for pump in pump_list:
                     for readings in pump['products']:
-                        pump_reading_item = PumpReadingItem.objects.filter(id=readings['id']).first()
-                        if (status == 'draft'  or status == 'pending') and readings['attendant'] not in [None, ""]:
+                        if readings['opening'] and readings['closing'] and readings['attendant']:
+                            pump_reading_item = PumpReadingItem.objects.filter(id=readings['id']).first()
                             if pump_reading_item:
                                 pump_reading_item.opening = readings['opening'] if readings['opening'] else None
                                 pump_reading_item.closing = readings['closing'] if readings['closing'] else None
@@ -685,8 +882,8 @@ class CapturePumpReadingView(APIView):
 
                 if dip_list:
                     for dip_item in dip_list:
-                        dip_reading_item = DipReading.objects.filter(id=dip_item['id']).first()
-                        if status == 'draft'  or status == 'pending' or status == 'approved':
+                        if dip_item['dip1'] and dip_item['dip2']:
+                            dip_reading_item = DipReading.objects.filter(id=dip_item['id']).first()
                             if dip_reading_item:
                                 dip_reading_item.dip1 = dip_item['dip1'] if dip_item['dip1'] else None
                                 dip_reading_item.dip2 = dip_item['dip2'] if dip_item['dip2'] else None
@@ -1070,4 +1267,35 @@ class PumpSummaryView(APIView):
             "overall_amount":overall_amount,
             "overall_discount":overall_discount
         }
-    
+
+
+class BranchSummaryView(APIView):
+    def get(self, request):
+        record_date = self.request.query_params.get('record_date', None)
+        company_id = get_current_user(self.request, 'company_id', None)
+        branch_list = []
+        
+        customer_subquery = Customer.objects.filter(branch=OuterRef('id')).values('branch').annotate(count=Count('id')).values('count')
+        pending_customers_subquery = Customer.objects.filter(branch=OuterRef('id')).values('branch').annotate(count=Count('id')).values('count')
+        pumps_subquery = Pump.objects.filter(branch=OuterRef('id')).values('branch').annotate(count=Count('id')).values('count')
+        users_subquery = User.objects.filter(user_branch=OuterRef('id')).values('user_branch').annotate(count=Count('id')).values('count')
+        exp_subquery = PendingExpense.objects.filter(branch=OuterRef('id'),status='pending').values('branch').annotate(count=Count('id')).values('count')
+        branches = CompanyBranch.objects.filter(company__id=company_id).annotate(
+            customers=Coalesce(Subquery(customer_subquery), Value(0)),
+            pending_customers=Coalesce(Subquery(pending_customers_subquery), Value(0)), 
+            pumps=Coalesce(Subquery(pumps_subquery), Value(0)),   
+            users=Coalesce(Subquery(users_subquery), Value(0)), 
+            pending_exp=Coalesce(Subquery(exp_subquery), Value(0)),      
+        )
+
+        for branch in branches:
+            branch_list.append({
+                "branch_id":branch.id,
+                "branch_name":branch.name,
+                "customers":branch.customers,
+                "pending_customers":branch.pending_customers,
+                "pumps":branch.pumps,
+                "users":branch.users,
+                "pending_exp":branch.pending_exp
+            })
+        return Response({"branch_list":branch_list})
