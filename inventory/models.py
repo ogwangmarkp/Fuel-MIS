@@ -42,7 +42,6 @@ class ProductTag(models.Model):
 
 class Product(models.Model):
     product_name = models.CharField(max_length=255)
-    code = models.CharField(max_length=255)
     is_fuel = models.BooleanField(default=True)
     enable_variation = models.BooleanField(default=False)
     deleted = models.BooleanField(default=False)
@@ -85,6 +84,7 @@ class ProductVariation(models.Model):
     variation_name = models.CharField(max_length=255)
     description = models.TextField(default='', null=True, blank=True)
     is_default = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
     unit_of_measure = models.CharField(
         max_length=255, default='', null=True, blank=True)
     deleted = models.BooleanField(default=False)
@@ -92,6 +92,7 @@ class ProductVariation(models.Model):
     enable_back_order = models.BooleanField(default=False)
     lead_time = models.DateTimeField(null=True, blank=True)
     discount = models.FloatField(default=0.0)
+    code = models.CharField(max_length=255)
     product = models.ForeignKey(
         Product, on_delete=models.CASCADE, related_name='pv_product')
     added_by = models.ForeignKey(

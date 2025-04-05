@@ -59,63 +59,26 @@ class ProductsViewSet(viewsets.ModelViewSet):
         saved_product = serializer.save(company_id=company_id,added_by=self.request.user )
         
         if saved_product:
-            ProductVariation.objects.create(**{
+            saved_variation = ProductVariation.objects.create(**{
                 "variation_name" : saved_product.product_name,
                 "description":self.request.data.get('description'),
                 "unit_of_measure":self.request.data.get('unit_of_measure'),
+                "code":self.request.data.get('code'),
                 "is_default":True,
                 "product" : saved_product,
                 "added_by":self.request.user
             })
 
-            '''if saved_variation:
+            if saved_variation:
                 ProductPricing.objects.create(**{
                     "variation" :saved_variation,
                     "regular_price" :self.request.data.get('regular_price'),
                     "added_by":self.request.user
-                }) '''
+                }) 
 
 
     def perform_update(self, serializer):
-        updated_product = serializer.save()
-        if updated_product:
-            # Get the first variation as the default variation
-            variation = ProductVariation.objects.filter(**{'product':updated_product, "is_default": True}).first()
-            # If variation exists, update it's amount and unit of measure
-            if variation:
-                variation.description = self.request.data.get('description')
-                variation.unit_of_measure = self.request.data.get('unit_of_measure')
-                variation.discount = self.request.data.get('discount')
-                variation.is_default = True
-                variation.save()
-                ''' pricing = ProductPricing.objects.filter(**{'variation':variation}).first()
-                if pricing:
-                    pricing.regular_price = self.request.data.get('regular_price')
-                    pricing.save()
-                else:
-                    ProductPricing.objects.create(**{
-                        "variation" :saved_variation,
-                        "regular_price" :self.request.data.get('regular_price'),
-                        "added_by":self.request.user
-                    }) '''
-            else:
-                ProductVariation.objects.create(**{
-                    "variation_name" : updated_product.product_name,
-                   "description":self.request.data.get('description'),
-                    "unit_of_measure":self.request.data.get('unit_of_measure'),
-                    "discount":self.request.data.get('discount'),
-                    "is_default":True,
-                    "product" : updated_product,
-                    "added_by":self.request.user
-                })
-
-                ''' if saved_variation:
-                    ProductPricing.objects.create(**{
-                        "variation" :saved_variation,
-                        "regular_price" :self.request.data.get('regular_price'),
-                        "added_by":self.request.user
-                    }) '''
-
+        serializer.save()
 
 class ProductVariationsViewSet(viewsets.ModelViewSet):
     serializer_class = ProductVariationSerializer
@@ -125,10 +88,6 @@ class ProductVariationsViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         query_filter = {"deleted": False}
         product_id = self.request.query_params.get('product', None)
-        status = self.request.query_params.get('status', 'no-default')
-        if status == 'no-default':
-            query_filter['is_default'] = False
-
         if product_id:
             query_filter['product__id'] = product_id
 
@@ -136,21 +95,28 @@ class ProductVariationsViewSet(viewsets.ModelViewSet):
 
 
     def perform_create(self, serializer):
-        serializer.save(added_by=self.request.user)
+        saved_variation = serializer.save(added_by=self.request.user)
+        
+        if saved_variation:
+                ProductPricing.objects.create(**{
+                    "variation" :saved_variation,
+                    "regular_price" :self.request.data.get('regular_price'),
+                    "added_by":self.request.user
+                }) 
 
 
 class ProductPricingViewSet(viewsets.ModelViewSet):
     serializer_class = ProductPricingSerializer
     filter_backends = (SearchFilter, OrderingFilter, DjangoFilterBackend, )
     search_fields = ('variation__variation_name','variation__product__product_name' )
-    filterset_fields = ['status',]
-    
+   
     def get_queryset(self):
         company_id = get_current_user(self.request, 'company_id', None)
-        return ProductPricing.objects.filter(**{
-            "deleted": False,
-            "variation__product__company__id":company_id
-        }).order_by('-id')
+        status = self.request.query_params.get('status', None)
+        query_filter ={ "deleted": False,"variation__product__company__id":company_id}
+        if status:
+            query_filter['status'] = status
+        return ProductPricing.objects.filter(**query_filter).order_by('-id')
 
     def perform_create(self, serializer):
         serializer.save(added_by=self.request.user)
@@ -687,7 +653,7 @@ class CapturePumpReadingView(APIView):
         payment_list = []
 
         pumps = Pump.objects.filter(**{"branch__id":branch_id})
-        dip_products = ProductVariation.objects.filter(**{"deleted":False,"product__company__id":company_id})
+        dip_products = ProductVariation.objects.filter(**{"is_active":True,"deleted":False,"product__company__id":company_id})
         attendants = CashAccount.objects.filter(teller__user_branch__id=branch_id)
         ''' if attendants:
             for attendant in attendants:
@@ -744,7 +710,7 @@ class CapturePumpReadingView(APIView):
                     dip_list.append({
                         "id":0,
                         "product_id":dip_product.id,
-                        "product_name":dip_product.product.product_name,
+                        "product_name":dip_product.variation_name,
                         "dip1":dip1,
                         "dip2":"",
                         "rtt":0,
@@ -787,7 +753,7 @@ class CapturePumpReadingView(APIView):
                                 "id":pump_reading_item.id,
                                 "pump_reading":pump_reading_item.pump_reading.id,
                                 "pump_product":pump_product.id,
-                                "product_name":pump_product.product.product.product_name,
+                                "product_name":pump_product.product.variation_name,
                                 "name":pump_product.name,
                                 "opening":pump_reading_item.opening,
                                 "closing":pump_reading_item.closing,

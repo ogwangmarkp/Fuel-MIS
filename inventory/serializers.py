@@ -39,9 +39,9 @@ class ProductSerializer(serializers.ModelSerializer):
     featured_image_url = serializers.SerializerMethodField()
     tags = serializers.SerializerMethodField()
     description = serializers.SerializerMethodField()
-    discount = serializers.SerializerMethodField()
-    regular_price = serializers.SerializerMethodField()
-    unit_of_measure = serializers.SerializerMethodField() 
+    #discount = serializers.SerializerMethodField()
+    #regular_price = serializers.SerializerMethodField()
+    #unit_of_measure = serializers.SerializerMethodField() 
 
     def get_description(self, obj):
         product_variation = ProductVariation.objects.filter(product__id=obj.id,is_default=True).first()
